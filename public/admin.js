@@ -21,7 +21,7 @@ function render() {
 }
 function openDetail(id) {
   const d=records.get(id);if(!d)return;selectedId=id;$('detail-title').textContent=d.fullName;$('detail-error').hidden=true;
-  const fields=[['Başvuru kodu',id],['Alan',CATEGORY_NAMES[d.category]],['E-posta',d.email],['Üniversite',d.university],['Bölüm / sınıf',d.department+' / '+d.year],['Portfolyo',d.portfolio||'Belirtilmedi'],['İlgi alanları',(d.skills||[]).join(', ')||'Belirtilmedi'],['Deneyim',d.experience],['Haftalık süre',d.time],['Motivasyon',d.motivation],['Proje / fikir',d.project||'Belirtilmedi'],['Başvuru tarihi',date(d.createdAt)]];
+  const fields=[['Başvuru kodu',id],['Alan',CATEGORY_NAMES[d.category]],...(d.category==='other'?[['Yazdığı alan',d.customArea]]:[]),['Ad soyad',d.fullName],['Telefon',d.phone],['E-posta',d.email],['Üniversite',d.university],['Bölüm / sınıf',d.department+' / '+d.year],['Portfolyo',d.portfolio||'Belirtilmedi'],['İlgi alanları',(d.skills||[]).join(', ')||'Belirtilmedi'],['Deneyim',d.experience],['Haftalık süre',d.time],['Motivasyon',d.motivation],['Proje / fikir',d.project||'Belirtilmedi'],['Başvuru tarihi',date(d.createdAt)]];
   $('detail-fields').replaceChildren();for(const [label,value] of fields){const row=document.createElement('div');const dt=document.createElement('dt');const dd=document.createElement('dd');dt.textContent=label;dd.textContent=value;row.append(dt,dd);$('detail-fields').append(row);}
   $('detail-status').value=d.status;$('detail').showModal();
 }

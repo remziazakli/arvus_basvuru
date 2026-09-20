@@ -1,6 +1,6 @@
 # ARVUS — GitHub + Firebase Hosting
 
-ARVUS başvuru sitesi: üç kategori sayfası, konsept videoları, üç boyutlu İHA ve kod editörü görünümlü form. Firestore başvuru kaydı, Google girişli yönetim paneli ve Google Apps Script e-posta bildirimi içerir.
+ARVUS başvuru sitesi: üç kategori sayfası, aktif “Diğer” alanı, telefon numarası alanı, konsept videoları, üç boyutlu İHA ve kod editörü görünümlü form. Firestore başvuru kaydı, Google girişli yönetim paneli ve Google Apps Script e-posta bildirimi içerir.
 
 **Etkinleştirmek için [KURULUM.md](KURULUM.md) adımlarını tamamlayın.** Hosting yayını tek başına veritabanını ve e-posta görevini kurmaz. Yönetici ve bildirim hesabı: `remziazakli@gmail.com`.
 

@@ -5,7 +5,7 @@ import {getAuth, signInAnonymously, browserLocalPersistence, browserSessionPersi
 import {getFirestore, doc, getDocFromServer, setDoc, serverTimestamp} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 
 export const ADMIN_EMAIL = 'remziazakli@gmail.com';
-export const CATEGORY_NAMES = {ai:'Havacılıkta Yapay Zekâ', ew:'Elektronik Harp', uav:'Uluslararası İHA'};
+export const CATEGORY_NAMES = {ai:'Havacılıkta Yapay Zekâ', ew:'Elektronik Harp', uav:'Uluslararası İHA', other:'Diğer'};
 const clients = new Map();
 
 export function getClient(role = 'applicant') {
@@ -34,6 +34,7 @@ export async function submitApplication(data) {
   if (!auth.currentUser) await signInAnonymously(auth);
   const uid = auth.currentUser.uid;
   if (!Object.hasOwn(CATEGORY_NAMES, data.category)) throw new Error('Lütfen bir başvuru alanı seç.');
+  if (data.category === 'other' && (!data.customArea || data.customArea.length < 2)) throw new Error('Lütfen başvurmak istediğin alanı yaz.');
   const reference = doc(db, 'applications', uid + '_' + data.category);
   // Stable per-browser/category ID makes a retry safe after an uncertain network response.
   const previous = await getDocFromServer(reference);

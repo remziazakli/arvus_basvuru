@@ -25,7 +25,7 @@ Authentication → Settings → Authorized domains listesinde `arvus-basvuru.web
 
 Firestore → **Rules** bölümüne gir. Bu depodaki [firestore.rules](firestore.rules) dosyasını aç → **Raw** → tüm içeriği kopyala. Rules editöründeki metni bununla değiştir → **Publish**. Test mode veya `allow read, write: if true` kullanma: form kişisel bilgi toplar.
 
-Kurallar: yalnızca doğrulanmış `remziazakli@gmail.com` Google hesabı tüm başvuruları görebilir. Aday sadece kendi anonim oturumunun başvurusunu tekil olarak okuyabilir; diğer başvuruları listeleyemez, değiştiremez. Her anonim oturumdan her alana bir kayıt yapılabilir. Başvuru metinleri/uzunlukları kurallarla doğrulanır. Başvurular yönetici açana kadar kapalıdır.
+Kurallar: yalnızca doğrulanmış `remziazakli@gmail.com` Google hesabı tüm başvuruları görebilir. Aday sadece kendi anonim oturumunun başvurusunu tekil olarak okuyabilir; diğer başvuruları listeleyemez, değiştiremez. Her anonim oturumdan her alana bir kayıt yapılabilir. Telefon numarası, başvuru metinleri ve uzunlukları kurallarla doğrulanır. Dördüncü kart olan **Diğer**, adayın kendi alanını yazmasına izin verir. Başvurular yönetici açana kadar kapalıdır.
 
 ## 4. Yönetim paneli
 

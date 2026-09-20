@@ -8,25 +8,27 @@ service cloud.firestore {
         && request.auth.token.firebase.sign_in_provider == 'google.com';
     }
     function ownId(id) {
-      return request.auth != null && id in [request.auth.uid + '_ai', request.auth.uid + '_ew', request.auth.uid + '_uav'];
+      return request.auth != null && id in [request.auth.uid + '_ai', request.auth.uid + '_ew', request.auth.uid + '_uav', request.auth.uid + '_other'];
     }
     function text(value, min, max) {
       return value is string && value.size() >= min && value.size() <= max;
     }
     function valid(d, id) {
-      return d.keys().hasAll(['uid','category','fullName','email','university','department','year','portfolio','skills','experience','time','motivation','project','consent','consentVersion','createdAt','status','emailNotified'])
-        && d.keys().hasOnly(['uid','category','fullName','email','university','department','year','portfolio','skills','experience','time','motivation','project','consent','consentVersion','createdAt','status','emailNotified'])
-        && d.uid == request.auth.uid && d.category in ['ai','ew','uav']
+      return d.keys().hasAll(['uid','category','fullName','phone','email','customArea','university','department','year','portfolio','skills','experience','time','motivation','project','consent','consentVersion','createdAt','status','emailNotified'])
+        && d.keys().hasOnly(['uid','category','fullName','phone','email','customArea','university','department','year','portfolio','skills','experience','time','motivation','project','consent','consentVersion','createdAt','status','emailNotified'])
+        && d.uid == request.auth.uid && d.category in ['ai','ew','uav','other']
         && id == request.auth.uid + '_' + d.category
-        && text(d.fullName, 2, 100) && text(d.email, 3, 150)
+        && text(d.fullName, 2, 100) && text(d.phone, 10, 20) && d.phone.matches('^\\+?[0-9 ()-]{10,20}$') && text(d.email, 3, 150)
         && d.email.matches('^[^\\s@]+@[^\\s@]+[.][^\\s@]+$')
+        && text(d.customArea, 0, 100) && ((d.category == 'other' && text(d.customArea, 2, 100)) || d.customArea == '')
         && text(d.university, 2, 150) && text(d.department, 2, 150)
         && d.year in ['Hazırlık','1. sınıf','2. sınıf','3. sınıf','4. sınıf ve üzeri','Lisansüstü']
         && text(d.portfolio, 0, 250) && (d.portfolio == '' || d.portfolio.matches('^https?://[^\\s]+$'))
         && d.skills is list && d.skills.size() <= 6
         && ((d.category == 'ai' && d.skills.hasOnly(['Python','OpenCV','Derin öğrenme','Veri hazırlama','C++','Yeni başlıyorum']))
           || (d.category == 'ew' && d.skills.hasOnly(['RF / anten','Sinyal işleme','Elektronik tasarım','Gömülü sistemler','Python / MATLAB','Yeni başlıyorum']))
-          || (d.category == 'uav' && d.skills.hasOnly(['Mekanik / CAD','Aviyonik','Uçuş yazılımı','Görüntü işleme','Üretim / kompozit','Yeni başlıyorum'])))
+          || (d.category == 'uav' && d.skills.hasOnly(['Mekanik / CAD','Aviyonik','Uçuş yazılımı','Görüntü işleme','Üretim / kompozit','Yeni başlıyorum']))
+          || (d.category == 'other' && d.skills.hasOnly(['Fikir geliştirme','Tasarım','Organizasyon','İletişim','İş geliştirme','Yeni başlıyorum'])))
         && d.experience in ['Yeni başlıyorum, öğrenmek istiyorum','Temel bilgim var','Kişisel / ders projesi geliştirdim','Takım / yarışma deneyimim var']
         && d.time in ['3–5 saat','6–10 saat','11–15 saat','16 saat ve üzeri']
         && text(d.motivation, 20, 1200) && text(d.project, 0, 1500)
