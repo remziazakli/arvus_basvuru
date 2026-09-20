@@ -1,0 +1,32 @@
+name: Publish ARVUS to Firebase
+on:
+  push:
+    branches: [main]
+    paths: ['public/**', 'firebase.json', '.firebaserc', '.github/workflows/firebase-hosting-merge.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: arvus-firebase-live
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check deployment configuration
+        env:
+          FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_ARVUS_BASVURU }}
+        run: |
+          test -f public/index.html
+          test -f public/vendor/three.module.js
+          test -f public/media/havacilik-ai.mp4
+          if [ -z "$FIREBASE_ACCOUNT" ]; then
+            echo 'Firebase bağlantısı kurulmamış. README içindeki GitHub bağlantısı adımını tamamlayın.'
+            exit 1
+          fi
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_ARVUS_BASVURU }}
+          projectId: arvus-basvuru
+          channelId: live

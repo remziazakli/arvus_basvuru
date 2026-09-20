@@ -1,0 +1,22 @@
+/* A compact editor surface, inside the existing application form. */
+.field-grid > label{min-width:0}
+.code-field{display:block;margin-top:9px;overflow:hidden;border:1px solid #30415c;border-radius:9px;background:#0d1727;box-shadow:0 5px 16px #0d172710;transition:border-color .18s,box-shadow .18s}
+.code-field:focus-within{border-color:#568eff;box-shadow:0 0 0 3px #2563eb24}
+.code-field:has([aria-invalid=true]){border-color:#ee818b}
+.code-field-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:#152136;border-bottom:1px solid #2a3951;color:#95baff;font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;letter-spacing:.3px}
+.code-symbol{color:#9aaecb}
+.code-field-body{position:relative;display:flex;min-width:0;align-items:stretch}
+.code-gutter{flex:0 0 42px;width:42px;overflow:hidden;padding:13px 8px 13px 0;text-align:right;border-right:1px solid #23334b;color:#8397b4;font:12px/26px ui-monospace,SFMono-Regular,Consolas,monospace;user-select:none}
+.code-gutter>span{display:block}
+.field-grid .code-field input,.field-grid .code-field textarea{flex:1;min-width:0;width:calc(100% - 42px);margin:0;border:0;border-radius:0;padding:13px 14px;background:transparent;color:#b8e8d7;caret-color:#83b2ff;font:16px/26px ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;letter-spacing:normal;box-shadow:none}
+.field-grid .code-field input{height:54px}
+.field-grid .code-field textarea{min-height:156px;white-space:pre-wrap;overflow-wrap:break-word;tab-size:4;resize:vertical}
+.field-grid .code-field input::placeholder,.field-grid .code-field textarea::placeholder{color:#91a3be;font:inherit;opacity:1}
+.field-grid .code-field input:focus-visible,.field-grid .code-field textarea:focus-visible{outline:2px solid #699dff;outline-offset:-2px}
+.code-field-footer{display:flex;justify-content:flex-end;padding:7px 13px;border-top:1px solid #23334b;color:#9db0cc;font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}
+.code-measure{position:absolute;top:0;left:0;visibility:hidden;pointer-events:none;white-space:pre-wrap;overflow-wrap:break-word;font:16px/26px ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;letter-spacing:normal}
+.code-field--multiline .code-gutter{position:absolute;top:0;bottom:0;left:0}
+.field-grid .code-field--multiline textarea{margin-left:42px;flex:0 1 calc(100% - 42px)}
+.field-grid select{font-size:16px}
+@media(max-width:760px){.code-field-header{padding:9px 11px}.code-gutter{flex-basis:34px;width:34px}.field-grid .code-field--multiline textarea{margin-left:34px;flex-basis:calc(100% - 34px)}}
+@media(prefers-reduced-motion:reduce){.code-field{transition:none}}
