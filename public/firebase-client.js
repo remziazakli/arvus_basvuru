@@ -4,7 +4,7 @@ import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-
 import {getAuth, signInAnonymously, browserLocalPersistence, browserSessionPersistence, setPersistence} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js';
 import {getFirestore, doc, getDocFromServer, setDoc, serverTimestamp} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 
-export const ADMIN_EMAILS = Object.freeze(["remziazakli@gmail.com","sudenzturk@gmail.com","sulbur.korkmaz@gmail.com"]);
+export const ADMIN_EMAILS = Object.freeze(["remziazakli@gmail.com","rmzazakli@gmail.com","sudenzturk@gmail.com","sulbur.korkmaz@gmail.com"]);
 export const CATEGORY_NAMES = {ai:'Havacılıkta Yapay Zekâ', ew:'Elektronik Harp', uav:'Uluslararası İHA', other:'Diğer'};
 const clients = new Map();
 
