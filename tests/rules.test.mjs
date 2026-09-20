@@ -1,0 +1,28 @@
+import {readFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+import {before,after,beforeEach,test} from 'node:test';
+import {initializeTestEnvironment,assertSucceeds,assertFails} from '@firebase/rules-unit-testing';
+import {doc,setDoc,getDoc,getDocs,collection,query,limit,updateDoc,deleteDoc,serverTimestamp} from 'firebase/firestore';
+let env;
+before(async()=>{env=await initializeTestEnvironment({projectId:'demo-arvus',firestore:{rules:readFileSync('firestore.rules','utf8')}});});
+after(async()=>env?.cleanup());
+beforeEach(async()=>{await env.clearFirestore();await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),'settings/registration'),{enabled:true}));});
+const person=(uid='alice')=>env.authenticatedContext(uid,{firebase:{sign_in_provider:'anonymous'}}).firestore();
+const admin=(verified=true,email='remziazakli@gmail.com',provider='google.com')=>env.authenticatedContext('admin',{email,email_verified:verified,firebase:{sign_in_provider:provider}}).firestore();
+const record=(uid='alice')=>({uid,category:'ai',fullName:'Örnek Aday',email:'aday@example.com',university:'SUBÜ',department:'Elektrik Elektronik',year:'2. sınıf',portfolio:'',skills:['Python'],experience:'Temel bilgim var',time:'6–10 saat',motivation:'Birlikte üretmek ve öğrenmek istiyorum.',project:'',consent:true,consentVersion:'2026-09-20',createdAt:serverTimestamp(),status:'new',emailNotified:false});
+test('valid submission saved once; own retry read allowed; applicant cannot overwrite',async()=>{const db=person();const ref=doc(db,'applications/alice_ai');await assertSucceeds(setDoc(ref,record()));await assertSucceeds(getDoc(ref));await assertFails(setDoc(ref,record()));});
+test('public, other applicants and impostor admins cannot read/list personal data',async()=>{await setDoc(doc(person(),'applications/alice_ai'),record());for(const db of [env.unauthenticatedContext().firestore(),person('bob'),admin(false),admin(true,'other@gmail.com'),admin(true,'remziazakli@gmail.com','password')]){await assertFails(getDoc(doc(db,'applications/alice_ai')));await assertFails(getDocs(query(collection(db,'applications'),limit(50))));}});
+test('verified Google admin can list and review but cannot modify answers or mail flags',async()=>{await setDoc(doc(person(),'applications/alice_ai'),record());const db=admin(),ref=doc(db,'applications/alice_ai');await assertSucceeds(getDocs(query(collection(db,'applications'),limit(50))));await assertSucceeds(updateDoc(ref,{status:'reviewing',updatedAt:serverTimestamp()}));await assertFails(updateDoc(ref,{motivation:'Changed answer',updatedAt:serverTimestamp()}));await assertFails(updateDoc(ref,{emailNotified:true}));await assertFails(deleteDoc(ref));});
+test('server validates fields, timestamps, ownership and allowed skill values',async()=>{for(const patch of [{uid:'bob'},{category:'ew'},{email:'bad'},{consent:false},{motivation:'short'},{fullName:'x'.repeat(101)},{status:'accepted'},{emailNotified:true},{unexpected:'x'},{portfolio:'javascript:alert(1)'},{skills:['Unknown']},{createdAt:new Date(0)}])await assertFails(setDoc(doc(person(),'applications/alice_ai'),{...record(),...patch}));});
+test('closed registrations and unauthenticated writes are denied',async()=>{await assertFails(setDoc(doc(env.unauthenticatedContext().firestore(),'applications/alice_ai'),record()));await setDoc(doc(admin(),'settings/registration'),{enabled:false,updatedAt:serverTimestamp()});await assertFails(setDoc(doc(person(),'applications/alice_ai'),record()));});
+test('only admin may toggle registration; arbitrary collections stay private',async()=>{await assertFails(setDoc(doc(person(),'settings/registration'),{enabled:true,updatedAt:serverTimestamp()}));await assertSucceeds(setDoc(doc(admin(),'settings/registration'),{enabled:true,updatedAt:serverTimestamp()}));await assertFails(setDoc(doc(admin(),'settings/registration'),{enabled:true,secret:'oops',updatedAt:serverTimestamp()}));await assertFails(setDoc(doc(person(),'mail/injected'),{to:'attacker@example.com'}));});
+test('mail REST query returns names only and acknowledgement preserves the application',async()=>{
+ await setDoc(doc(person(),'applications/alice_ai'),record());
+ const prefix='projects/demo-arvus/databases/(default)/documents';
+ async function request(suffix,payload){const r=await fetch('http://'+process.env.FIRESTORE_EMULATOR_HOST+'/v1/'+prefix+suffix,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer owner'},body:JSON.stringify(payload)});assert.equal(r.ok,true,await r.clone().text());return r.json();}
+ const rows=await request(':runQuery',{structuredQuery:{from:[{collectionId:'applications'}],select:{fields:[{fieldPath:'__name__'}]},where:{fieldFilter:{field:{fieldPath:'emailNotified'},op:'EQUAL',value:{booleanValue:false}}},limit:100}});
+ const name=rows.find(r=>r.document).document.name;assert.equal(name,prefix+'/applications/alice_ai');assert.equal(rows[0].document.fields?.fullName,undefined);
+ const existing=await request(':batchGet',{documents:[name],mask:{fieldPaths:['emailNotified']}});assert.equal(existing[0].found.name,name);
+ await request(':commit',{writes:[{update:{name,fields:{emailNotified:{booleanValue:true}}},currentDocument:{exists:true},updateMask:{fieldPaths:['emailNotified']},updateTransforms:[{fieldPath:'emailNotifiedAt',setToServerValue:'REQUEST_TIME'}]}]});
+ const saved=(await getDoc(doc(admin(),'applications/alice_ai'))).data();assert.equal(saved.emailNotified,true);assert.equal(saved.fullName,'Örnek Aday');
+});

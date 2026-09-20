@@ -1,6 +1,12 @@
 # ARVUS — GitHub + Firebase Hosting
 
-ARVUS başvuru demosu: üç kategori sayfası, konsept videoları, üç boyutlu İHA ve kod editörü görünümlü form. Form henüz başvuru kaydetmez veya göndermez.
+ARVUS başvuru sitesi: üç kategori sayfası, konsept videoları, üç boyutlu İHA ve kod editörü görünümlü form. Firestore başvuru kaydı, Google girişli yönetim paneli ve Google Apps Script e-posta bildirimi içerir.
+
+**Etkinleştirmek için [KURULUM.md](KURULUM.md) adımlarını tamamlayın.** Hosting yayını tek başına veritabanını ve e-posta görevini kurmaz. Yönetici ve bildirim hesabı: `remziazakli@gmail.com`.
+
+Yönetim paneli: https://arvus-basvuru.web.app/admin.html
+
+Testler: `npm ci`, `npm test`, `npm run test:rules` (Node.js 22 ve Java 17+). Emulator testleri `demo-arvus` kullanır; gerçek projeye test verisi göndermez.
 
 ## Dosyalar
 - `public/`: Yayınlanacak site dosyaları.
