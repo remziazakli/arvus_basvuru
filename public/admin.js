@@ -1,6 +1,6 @@
-import {getClient, ADMIN_EMAIL, CATEGORY_NAMES, friendlyError} from './firebase-client.js';
+import {getClient, ADMIN_EMAILS, CATEGORY_NAMES, friendlyError} from './firebase-client.js?v=admin-access-2';
 import {GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js';
-import {collection, query, orderBy, limit, onSnapshot, getDocs, startAfter, doc, setDoc, updateDoc, serverTimestamp} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
+import {collection, query, orderBy, limit, onSnapshot, getDocs, getDocsFromServer, startAfter, doc, setDoc, updateDoc, serverTimestamp} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 const $ = id => document.getElementById(id);
 const STATUSES = {new:'Yeni', reviewing:'İnceleniyor', accepted:'Kabul edildi', rejected:'Uygun bulunmadı'};
 const records = new Map();
@@ -51,7 +51,7 @@ function startDashboard(user) {
 }
 $('login').addEventListener('click',async()=>{
   $('error').hidden=true;$('login').disabled=true;
-  try{const provider=new GoogleAuthProvider();provider.setCustomParameters({prompt:'select_account',login_hint:ADMIN_EMAIL});await signInWithPopup(auth,provider);}catch(err){report(err);}finally{$('login').disabled=false;}
+  try{const provider=new GoogleAuthProvider();provider.setCustomParameters({prompt:'select_account'});await signInWithPopup(auth,provider);}catch(err){report(err);}finally{$('login').disabled=false;}
 });
 $('logout').addEventListener('click',()=>signOut(auth).catch(report));
 $('category-filter').addEventListener('change',render);$('status-filter').addEventListener('change',render);
@@ -77,7 +77,20 @@ try {
   ({auth,db}=await getClient('admin'));$('loading').hidden=true;$('login').disabled=false;
   onAuthStateChanged(auth,async user=>{
     reset();if(!user)return;
-    if(user.email!==ADMIN_EMAIL||!user.emailVerified||!user.providerData.some(x=>x.providerId==='google.com')){await signOut(auth);report(new Error('Bu Google hesabının yönetim yetkisi yok. Yetkili hesapla giriş yap.'));return;}
-    $('error').hidden=true;startDashboard(user);
+    if(!ADMIN_EMAILS.includes(user.email)||!user.emailVerified||!user.providerData.some(x=>x.providerId==='google.com')){await signOut(auth);report(new Error('Bu Google hesabının yönetim yetkisi yok. Yetkili hesapla giriş yap.'));return;}
+    const currentGeneration=generation;
+    try {
+      // Confirm the deployed database rules allow access before displaying the panel.
+      await getDocsFromServer(query(collection(db,'applications'),limit(1)));
+      if(currentGeneration!==generation)return;
+      $('error').hidden=true;startDashboard(user);
+    } catch(err) {
+      if(currentGeneration!==generation)return;
+      reset();
+      await signOut(auth).catch(()=>{});
+      report(err.code==='permission-denied'
+        ? new Error('Bu hesabın yönetim yetkisi doğrulanamadı. Yönetici erişim kurallarının yayımlandığını kontrol et.')
+        : err);
+    }
   });
 }catch(err){$('loading').textContent='Bağlantı henüz hazır değil. Firebase kurulum adımlarını tamamladıktan sonra sayfayı yenile.';report(err);}
