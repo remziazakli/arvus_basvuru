@@ -28,8 +28,10 @@ test('mail REST query returns names only and acknowledgement preserves the appli
  const saved=(await getDoc(doc(admin(),'applications/alice_ai'))).data();assert.equal(saved.emailNotified,true);assert.equal(saved.fullName,'Örnek Aday');
 });
 
-for(const email of ["remziazakli@gmail.com","rmzazakli@gmail.com","sudenzturk@gmail.com","sulbur.korkmaz@gmail.com"]) {
+for(const email of ["remziazakli@gmail.com","rmzazakli@gmail.com","sudenzturk@gmail.com"]) {
  test('listed admin may review and toggle registration: '+email,async()=>{await setDoc(doc(person(),'applications/alice_ai'),record());const db=admin(true,email);await assertSucceeds(getDocs(query(collection(db,'applications'),limit(50))));await assertSucceeds(updateDoc(doc(db,'applications/alice_ai'),{status:'accepted',updatedAt:serverTimestamp()}));await assertSucceeds(setDoc(doc(db,'settings/registration'),{enabled:false,updatedAt:serverTimestamp()}));});
  test('listed email requires verified Google sign-in: '+email,async()=>{for(const db of [admin(false,email),admin(true,email,'password')]){await assertFails(getDocs(query(collection(db,'applications'),limit(1))));await assertFails(setDoc(doc(db,'settings/registration'),{enabled:false,updatedAt:serverTimestamp()}));}});
 }
 test('unlisted Google account cannot modify registration or reviews',async()=>{await setDoc(doc(person(),'applications/alice_ai'),record());const db=admin(true,'outsider@gmail.com');await assertFails(updateDoc(doc(db,'applications/alice_ai'),{status:'accepted',updatedAt:serverTimestamp()}));await assertFails(setDoc(doc(db,'settings/registration'),{enabled:false,updatedAt:serverTimestamp()}));});
+
+test('revoked administrator cannot read applications or perform admin writes',async()=>{await setDoc(doc(person(),'applications/alice_ai'),record());const db=admin(true,'sulbur.korkmaz@gmail.com');await assertFails(getDoc(doc(db,'applications/alice_ai')));await assertFails(getDocs(query(collection(db,'applications'),limit(50))));await assertFails(updateDoc(doc(db,'applications/alice_ai'),{status:'accepted',updatedAt:serverTimestamp()}));await assertFails(setDoc(doc(db,'settings/registration'),{enabled:false,updatedAt:serverTimestamp()}));});

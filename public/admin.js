@@ -1,4 +1,4 @@
-import {getClient, ADMIN_EMAILS, CATEGORY_NAMES, friendlyError} from './firebase-client.js?v=admin-access-2';
+import {getClient, ADMIN_EMAILS, CATEGORY_NAMES, friendlyError} from './firebase-client.js?v=admin-access-3';
 import {GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js';
 import {collection, query, orderBy, limit, onSnapshot, getDocs, getDocsFromServer, startAfter, doc, setDoc, updateDoc, serverTimestamp} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 const $ = id => document.getElementById(id);
