@@ -1,6 +1,7 @@
+import {collectApplications} from './application-export.js?v=1';
 import {getClient, ADMIN_EMAILS, CATEGORY_NAMES, friendlyError} from './firebase-client.js?v=admin-access-3';
 import {GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js';
-import {collection, query, orderBy, limit, onSnapshot, getDocs, getDocsFromServer, startAfter, doc, setDoc, updateDoc, serverTimestamp} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
+import {collection, query, documentId, orderBy, limit, onSnapshot, getDocs, getDocsFromServer, startAfter, doc, setDoc, updateDoc, serverTimestamp} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 const $ = id => document.getElementById(id);
 const STATUSES = {new:'Yeni', reviewing:'İnceleniyor', accepted:'Kabul edildi', rejected:'Uygun bulunmadı'};
 const records = new Map();
@@ -69,6 +70,20 @@ $('more').addEventListener('click',async()=>{
   if(!cursor)return;const currentGeneration=generation;$('more').disabled=true;
   try{const result=await getDocs(query(collection(db,'applications'),orderBy('createdAt','desc'),startAfter(cursor),limit(50)));if(currentGeneration!==generation)return;result.forEach(d=>records.set(d.id,{...d.data(),id:d.id}));cursor=result.docs.at(-1)||cursor;$('more').hidden=result.size<50;render();}catch(err){report(err);}finally{$('more').disabled=false;}
 });
+$('export-applications').addEventListener('click',async()=>{
+  const button=$('export-applications'),currentGeneration=generation,user=auth?.currentUser;
+  if(!user||$('dashboard').hidden||button.disabled)return;
+  const sessionValid=()=>generation===currentGeneration&&auth.currentUser?.uid===user.uid&&!$('dashboard').hidden;
+  button.disabled=true;$('error').hidden=true;
+  try {
+    const result=await collectApplications(cursor=>getDocsFromServer(query(collection(db,'applications'),orderBy(documentId()),...(cursor?[startAfter(cursor)]:[]),limit(100))),sessionValid,count=>{if(sessionValid())button.textContent=count+' başvuru hazırlanıyor…';});
+    if(!sessionValid())return;
+    if(!result.applications.length){$('notice').textContent='Dışa aktarılacak başvuru bulunamadı.';return;}
+    const url=URL.createObjectURL(new Blob([JSON.stringify(result,null,2)],{type:'application/json;charset=utf-8'}));
+    const link=document.createElement('a');link.href=url;link.download='ARVUS-Basvurular-'+new Date().toISOString().replaceAll(':','-')+'.json';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+    $('notice').textContent=result.applications.length+' başvuru indirildi. ARVUS-PC panelinde “Başvuruları içe aktar” ile bu dosyayı seç.';
+  } catch(err){if(sessionValid())report(err);} finally {button.disabled=false;button.textContent='Tüm başvuruları indir';}
+});
 $('notifications').addEventListener('click',async()=>{
   if(!('Notification' in window)){ $('notice').textContent='Bu tarayıcı masaüstü bildirimlerini desteklemiyor. Yeni başvurular panelde gösterilecek.';return; }
   try{const permission=await Notification.requestPermission();$('notice').textContent=permission==='granted'?'Bu panel açıkken yeni başvurular için bildirim gösterilecek.':'Bildirim izni verilmedi. Yeni başvurular panelde gösterilecek.';}catch(_){$('notice').textContent='Bildirimler bu tarayıcıda açılamadı. Panel bildirimleri kullanılabilir.';}
@@ -94,3 +109,4 @@ try {
     }
   });
 }catch(err){$('loading').textContent='Bağlantı henüz hazır değil. Firebase kurulum adımlarını tamamladıktan sonra sayfayı yenile.';report(err);}
+
