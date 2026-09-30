@@ -55,6 +55,217 @@ service cloud.firestore {
       // Deletion is restricted to trusted project owners using the Firebase console.
       allow delete: if false;
     }
+
+    // Team workspace is isolated from applications and their original admin().
+    function mgGoogle() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com'
+        && request.auth.token.email.lower() != 'sulbur.korkmaz@gmail.com';
+    }
+    function mgEmail() { return request.auth.token.email.lower(); }
+    function mgMember() { return get(/databases/$(database)/documents/team_members/$(mgEmail())).data; }
+    function mgActive() { return mgGoogle() && (admin() || mgMember().active == true); }
+    function mgAdmin() { return mgGoogle() && (admin() || (mgMember().active == true && mgMember().role == 'admin')); }
+    function mgTeam(teamId) { return mgActive() && (mgAdmin() || teamId in mgMember().teamIds); }
+    function mgManage(teamId) { return mgAdmin() || (mgTeam(teamId) && mgMember().role == 'mentor'); }
+    function mgList() { return request.query.limit <= 500; }
+    function mgAddress(email) {
+      return text(email, 3, 150) && email == email.lower()
+        && email.matches('^[^\\s@/]+@[^\\s@/]+[.][^\\s@/]+ { allow read, write: if false; }
+  }
+}
+)
+        && email != 'sulbur.korkmaz@gmail.com';
+    }
+    function mgURL(url) { return text(url, 0, 1000) && (url == '' || url.matches('^https?://[^\\s]+ { allow read, write: if false; }
+  }
+}
+)); }
+    function mgTarget(email, teamId) {
+      return mgAddress(email) && (
+        email in ['rmzazakli@gmail.com','remziazakli@gmail.com','sudenzturk@gmail.com']
+        || (get(/databases/$(database)/documents/team_members/$(email)).data.active == true
+          && teamId in get(/databases/$(database)/documents/team_members/$(email)).data.teamIds));
+    }
+    function mgStamp(d) { return d.updatedAt == request.time; }
+    function mgCreated(d) { return d.createdAt == request.time && d.createdBy == mgEmail(); }
+    function mgKeepCreated(d) { return d.createdAt == resource.data.createdAt && d.createdBy == resource.data.createdBy; }
+    function mgTeamExists(id) { return exists(/databases/$(database)/documents/team_teams/$(id)); }
+    match /team_members/{email} {
+      allow get: if mgGoogle() && (email == mgEmail() || mgAdmin() || (mgActive() && resource.data.active == true));
+      allow list: if mgList() && (mgAdmin() || (mgActive() && resource.data.active == true));
+      allow create, update: if mgAdmin() && mgAddress(email)
+        && !(email in ['rmzazakli@gmail.com','remziazakli@gmail.com','sudenzturk@gmail.com'])
+        && request.resource.data.keys().hasAll(['email','displayName','role','active','teamIds','unitId','updatedAt'])
+        && request.resource.data.keys().hasOnly(['email','displayName','role','active','teamIds','unitId','updatedAt'])
+        && request.resource.data.email == email
+        && text(request.resource.data.displayName,2,100)
+        && request.resource.data.role in ['admin','mentor','member']
+        && request.resource.data.active is bool
+        && request.resource.data.teamIds is list && request.resource.data.teamIds.size() <= 20
+        && text(request.resource.data.unitId,0,100) && mgStamp(request.resource.data);
+      allow delete: if false;
+    }
+    match /team_teams/{id} {
+      allow get: if mgTeam(id);
+      // Names of all teams are visible to activated workspace members.
+      allow list: if mgActive() && mgList();
+      allow create, update: if mgAdmin()
+        && request.resource.data.keys().hasAll(['name','description','archived','updatedAt'])
+        && request.resource.data.keys().hasOnly(['name','description','archived','updatedAt'])
+        && text(request.resource.data.name,2,100) && text(request.resource.data.description,0,1000)
+        && request.resource.data.archived is bool && mgStamp(request.resource.data);
+      allow delete: if false;
+    }
+    match /team_units/{id} {
+      allow get: if mgTeam(resource.data.teamId);
+      allow list: if mgList() && mgTeam(resource.data.teamId);
+      allow create, update: if mgAdmin()
+        && request.resource.data.keys().hasAll(['name','teamId','archived','updatedAt'])
+        && request.resource.data.keys().hasOnly(['name','teamId','archived','updatedAt'])
+        && text(request.resource.data.name,2,100) && mgTeamExists(request.resource.data.teamId)
+        && request.resource.data.archived is bool && mgStamp(request.resource.data);
+      allow delete: if false;
+    }
+    function mgTask(d) {
+      return d.keys().hasAll(['title','description','teamId','assignee','dueDate','priority','status','resultURL','createdAt','createdBy','updatedAt'])
+        && d.keys().hasOnly(['title','description','teamId','assignee','dueDate','priority','status','resultURL','createdAt','createdBy','updatedAt'])
+        && text(d.title,2,150) && text(d.description,0,5000) && mgTeamExists(d.teamId)
+        && mgTarget(d.assignee,d.teamId) && text(d.dueDate,0,10)
+        && (d.dueDate == '' || d.dueDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2} { allow read, write: if false; }
+  }
+}
+))
+        && d.priority in ['normal','high'] && d.status in ['todo','doing','review','done']
+        && mgURL(d.resultURL) && mgStamp(d);
+    }
+    match /team_tasks/{id} {
+      allow get: if mgTeam(resource.data.teamId);
+      allow list: if mgList() && mgTeam(resource.data.teamId);
+      allow create: if mgManage(request.resource.data.teamId) && mgTask(request.resource.data) && mgCreated(request.resource.data);
+      allow update: if mgTeam(resource.data.teamId) && mgTask(request.resource.data)
+        && request.resource.data.teamId == resource.data.teamId && mgKeepCreated(request.resource.data)
+        && (mgManage(resource.data.teamId) || (resource.data.assignee == mgEmail()
+          && resource.data.status != 'done'
+          && request.resource.data.status in ['todo','doing','review']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','resultURL','updatedAt'])));
+      allow delete: if false;
+    }
+    match /team_comments/{id} {
+      allow get: if mgTeam(resource.data.teamId);
+      allow list: if mgList() && mgTeam(resource.data.teamId);
+      allow create: if mgTeam(request.resource.data.teamId)
+        && request.resource.data.keys().hasAll(['teamId','taskId','body','author','createdAt'])
+        && request.resource.data.keys().hasOnly(['teamId','taskId','body','author','createdAt'])
+        && request.resource.data.teamId == get(/databases/$(database)/documents/team_tasks/$(request.resource.data.taskId)).data.teamId
+        && text(request.resource.data.body,1,2000) && request.resource.data.author == mgEmail()
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+    function mgRoute(d) {
+      return d.keys().hasAll(['teamId','title','instructions','resourceURL','archived','createdAt','createdBy','updatedAt'])
+        && d.keys().hasOnly(['teamId','title','instructions','resourceURL','archived','createdAt','createdBy','updatedAt'])
+        && mgTeamExists(d.teamId) && text(d.title,2,150) && text(d.instructions,2,5000)
+        && mgURL(d.resourceURL) && d.archived is bool && mgStamp(d);
+    }
+    match /team_routes/{id} {
+      allow get: if mgTeam(resource.data.teamId);
+      allow list: if mgList() && mgTeam(resource.data.teamId);
+      allow create: if mgManage(request.resource.data.teamId) && mgRoute(request.resource.data) && mgCreated(request.resource.data);
+      allow update: if mgManage(resource.data.teamId) && mgRoute(request.resource.data)
+        && request.resource.data.teamId == resource.data.teamId && mgKeepCreated(request.resource.data);
+      allow delete: if false;
+    }
+    function mgProgress(d,id) {
+      return d.keys().hasAll(['teamId','routeId','memberEmail','evidenceURL','note','status','feedback','reviewedBy','submittedAt','updatedAt'])
+        && d.keys().hasOnly(['teamId','routeId','memberEmail','evidenceURL','note','status','feedback','reviewedBy','submittedAt','updatedAt'])
+        && id == d.routeId + '_' + d.memberEmail
+        && d.teamId == get(/databases/$(database)/documents/team_routes/$(d.routeId)).data.teamId
+        && mgAddress(d.memberEmail) && mgURL(d.evidenceURL) && d.evidenceURL != ''
+        && text(d.note,0,2000) && text(d.feedback,0,2000)
+        && d.status in ['pending','approved','changes'] && mgStamp(d);
+    }
+    match /team_progress/{id} {
+      allow get: if mgManage(resource.data.teamId) || (mgTeam(resource.data.teamId) && resource.data.memberEmail == mgEmail());
+      allow list: if mgList() && (mgManage(resource.data.teamId) || (mgTeam(resource.data.teamId) && resource.data.memberEmail == mgEmail()));
+      allow create: if mgTeam(request.resource.data.teamId) && mgProgress(request.resource.data,id)
+        && request.resource.data.memberEmail == mgEmail() && request.resource.data.status == 'pending'
+        && request.resource.data.feedback == '' && request.resource.data.reviewedBy == ''
+        && request.resource.data.submittedAt == request.time
+        && get(/databases/$(database)/documents/team_routes/$(request.resource.data.routeId)).data.archived == false;
+      allow update: if mgTeam(resource.data.teamId) && mgProgress(request.resource.data,id)
+        && request.resource.data.teamId == resource.data.teamId && request.resource.data.routeId == resource.data.routeId
+        && request.resource.data.memberEmail == resource.data.memberEmail
+        && ((resource.data.memberEmail == mgEmail() && resource.data.status != 'approved'
+          && request.resource.data.status == 'pending' && request.resource.data.feedback == ''
+          && request.resource.data.reviewedBy == '' && request.resource.data.submittedAt == request.time
+          && get(/databases/$(database)/documents/team_routes/$(resource.data.routeId)).data.archived == false)
+        || (mgManage(resource.data.teamId) && resource.data.memberEmail != mgEmail()
+          && resource.data.status == 'pending' && request.resource.data.status in ['approved','changes']
+          && request.resource.data.reviewedBy == mgEmail()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','feedback','reviewedBy','updatedAt'])));
+      allow delete: if false;
+    }
+    function mgAsset(d) {
+      return d.keys().hasAll(['teamId','name','serial','notes','archived','currentLoanId','borrower','updatedAt'])
+        && d.keys().hasOnly(['teamId','name','serial','notes','archived','currentLoanId','borrower','updatedAt'])
+        && mgTeamExists(d.teamId) && text(d.name,2,150) && text(d.serial,0,150) && text(d.notes,0,2000)
+        && d.archived is bool && text(d.currentLoanId,0,150) && text(d.borrower,0,150) && mgStamp(d);
+    }
+    match /team_inventory/{id} {
+      allow get: if mgTeam(resource.data.teamId);
+      allow list: if mgList() && mgTeam(resource.data.teamId);
+      allow create: if mgAdmin() && mgAsset(request.resource.data)
+        && request.resource.data.currentLoanId == '' && request.resource.data.borrower == '';
+      allow update: if mgAdmin() && mgAsset(request.resource.data)
+        && request.resource.data.teamId == resource.data.teamId
+        && ((request.resource.data.currentLoanId == resource.data.currentLoanId && request.resource.data.borrower == resource.data.borrower)
+        || (resource.data.currentLoanId == '' && resource.data.archived == false
+          && request.resource.data.currentLoanId != '' && mgTarget(request.resource.data.borrower,resource.data.teamId)
+          && getAfter(/databases/$(database)/documents/team_loans/$(request.resource.data.currentLoanId)).data.itemId == id
+          && getAfter(/databases/$(database)/documents/team_loans/$(request.resource.data.currentLoanId)).data.status == 'out'
+          && getAfter(/databases/$(database)/documents/team_loans/$(request.resource.data.currentLoanId)).data.borrower == request.resource.data.borrower)
+        || (resource.data.currentLoanId != '' && request.resource.data.currentLoanId == '' && request.resource.data.borrower == ''
+          && getAfter(/databases/$(database)/documents/team_loans/$(resource.data.currentLoanId)).data.status == 'returned'));
+      allow delete: if false;
+    }
+    match /team_loans/{id} {
+      allow get: if mgTeam(resource.data.teamId);
+      allow list: if mgList() && mgTeam(resource.data.teamId);
+      allow create: if mgAdmin()
+        && request.resource.data.keys().hasAll(['teamId','itemId','borrower','status','checkedOutAt','returnedAt','createdBy','returnNote'])
+        && request.resource.data.keys().hasOnly(['teamId','itemId','borrower','status','checkedOutAt','returnedAt','createdBy','returnNote'])
+        && request.resource.data.teamId == get(/databases/$(database)/documents/team_inventory/$(request.resource.data.itemId)).data.teamId
+        && get(/databases/$(database)/documents/team_inventory/$(request.resource.data.itemId)).data.currentLoanId == ''
+        && getAfter(/databases/$(database)/documents/team_inventory/$(request.resource.data.itemId)).data.currentLoanId == id
+        && getAfter(/databases/$(database)/documents/team_inventory/$(request.resource.data.itemId)).data.borrower == request.resource.data.borrower
+        && mgTarget(request.resource.data.borrower,request.resource.data.teamId)
+        && request.resource.data.status == 'out' && request.resource.data.checkedOutAt == request.time
+        && request.resource.data.returnedAt == null && request.resource.data.createdBy == mgEmail()
+        && request.resource.data.returnNote == '';
+      allow update: if mgAdmin() && resource.data.status == 'out'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','returnedAt','returnNote'])
+        && request.resource.data.status == 'returned' && request.resource.data.returnedAt == request.time
+        && text(request.resource.data.returnNote,0,2000)
+        && getAfter(/databases/$(database)/documents/team_inventory/$(resource.data.itemId)).data.currentLoanId == '';
+      allow delete: if false;
+    }
+    match /team_notifications/{id} {
+      allow get: if mgActive() && (mgAdmin() || resource.data.recipient == mgEmail());
+      allow list: if mgList() && mgActive() && (mgAdmin() || resource.data.recipient == mgEmail());
+      allow create: if mgManage(request.resource.data.teamId)
+        && request.resource.data.keys().hasAll(['teamId','recipient','title','body','read','createdAt','createdBy'])
+        && request.resource.data.keys().hasOnly(['teamId','recipient','title','body','read','createdAt','createdBy'])
+        && mgTarget(request.resource.data.recipient,request.resource.data.teamId)
+        && text(request.resource.data.title,2,150) && text(request.resource.data.body,0,1000)
+        && request.resource.data.read == false && mgCreated(request.resource.data);
+      allow update: if mgActive() && resource.data.recipient == mgEmail()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+        && request.resource.data.read == true;
+      allow delete: if false;
+    }
+
     match /{document=**} { allow read, write: if false; }
   }
 }

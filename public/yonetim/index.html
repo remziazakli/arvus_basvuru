@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#081329"><meta name="robots" content="noindex,nofollow">
+<title>ARVUS • Takım yönetimi</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="./panel.css"></head>
+<body>
+<a class="skip" href="#content">İçeriğe geç</a>
+<section id="gate" class="gate">
+  <div class="gate-art" aria-hidden="true"><span class="orbit"></span><div class="monogram">A<span>R</span></div><p>FİKİRDEN UÇUŞA.</p></div>
+  <div class="gate-copy"><a class="brand" href="/">ARVUS<span>TEAMSPACE / 01</span></a><p class="eyebrow">BİRLİKTE TASARLA. BİRLİKTE ÜRET.</p>
+  <h1>Takımın burada.<br><em>Sıradaki adım senin.</em></h1><p class="muted">Görevler, öğrenme rotaları ve ekipmanlar.<br>ARVUS'un ortak çalışma alanına hoş geldin.</p>
+  <p id="gate-message" role="status">Bağlantı hazırlanıyor…</p><button id="login" disabled>Google ile giriş yap <span>↗</span></button><button id="gate-logout" class="secondary" hidden>Başka hesap kullan</button><a class="muted" href="/">Başvuru sitesine dön ↗</a></div>
+</section>
+<div id="shell" class="shell" hidden>
+  <aside class="sidebar"><a class="brand" href="/yonetim/">ARVUS<span>TAKIM YÖNETİMİ</span></a><p class="eyebrow">ÇALIŞMA ALANI</p><nav id="navigation" aria-label="Panel bölümleri"></nav><div class="sidebar-bottom"><a href="/admin.html">Başvuru paneli ↗</a><a href="/">Başvuru sitesi ↗</a><span class="online">● Firebase bağlantısı</span></div></aside>
+  <div class="workspace"><header class="topbar"><div><span class="eyebrow">ARVUS / TEAMSPACE</span><p id="identity"></p></div><div class="top-actions"><label class="team-switch">Takım<select id="team-filter" aria-label="Çalışılan takım"></select></label><button id="logout" class="secondary">Çıkış</button></div></header>
+  <div id="error" class="message error" role="alert" hidden></div><div id="notice" class="message" role="status" hidden></div>
+  <main id="content" tabindex="-1"></main></div>
+</div>
+<dialog id="editor"><form id="editor-form"><div class="dialog-heading"><h2 id="editor-title"></h2><button type="button" id="close-editor" class="secondary" aria-label="Pencereyi kapat">✕</button></div><div id="editor-fields"></div><p id="editor-error" class="error" role="alert"></p><div class="dialog-actions"><button id="editor-save" type="submit">Kaydet</button></div></form></dialog>
+<input type="file" id="import-file" accept="application/json,.json" hidden>
+<script type="module" src="./app.js"></script></body></html>

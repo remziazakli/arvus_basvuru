@@ -34,3 +34,9 @@ Site değişikliklerini public/ içinde yap. main dalına gönderilen değişikl
 `python -m http.server 8000 --directory public` ile başlatıp http://localhost:8000 aç. Modüller nedeniyle HTML dosyasını doğrudan çift tıklayarak açmak yerine HTTP sunucusu kullan.
 
 Kaynaklar: [Firebase GitHub bağlantısı](https://firebase.google.com/docs/hosting/github-integration), [hizmet hesabı kurulumu](https://github.com/FirebaseExtended/action-hosting-deploy/blob/main/docs/service-account.md).
+
+## Takım yönetim paneli
+
+Yeni takım çalışma alanı: `/yonetim/`. Google girişli yönetici/mentor/üye rolleri, görevler, öğrenme rotaları, mentor onayı, envanter/zimmet, bildirimler ve JSON aktarımı içerir. Mevcut başvuru paneli `/admin.html` adresinde korunur. Kurulum, rol matrisi ve sınırlar: [TAKIM-YONETIMI.md](docs/TAKIM-YONETIMI.md).
+
+Doğrulama: `npm run build`, `npm test`, `npm run test:rules`. PR kontrolleri üretime erişmeden Firestore emulatorü kullanır.
