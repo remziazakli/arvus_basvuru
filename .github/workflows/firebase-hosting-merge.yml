@@ -2,7 +2,7 @@ name: Publish ARVUS to Firebase
 on:
   push:
     branches: [main]
-    paths: ['public/**', 'firebase.json', 'firestore.rules', '.firebaserc', '.github/workflows/firebase-hosting-merge.yml']
+    paths: ['public/**', 'portal/**', 'package*.json', 'tests/**', 'firebase*.json', 'firestore.rules', '.firebaserc', '.github/workflows/**']
   workflow_dispatch:
 permissions:
   contents: read
@@ -10,7 +10,10 @@ concurrency:
   group: arvus-firebase-live
   cancel-in-progress: false
 jobs:
+  checks:
+    uses: ./.github/workflows/portal-checks.yml
   deploy:
+    needs: checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

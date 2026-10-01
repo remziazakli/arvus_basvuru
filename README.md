@@ -6,6 +6,16 @@ ARVUS başvuru sitesi: üç kategori sayfası, aktif “Diğer” alanı, telefo
 
 Yönetim paneli: https://arvus-basvuru.web.app/admin.html
 
+## Takım portalı (yeni bölüm)
+
+Google girişli üye/mentor/yönetici çalışma alanı `public/yonetim/` içinde
+hazırlanmıştır. Yayın sonrası adresi `/yonetim/` olacaktır; başvuru sitesi ve
+`admin.html` ayrı kalır. Kurulum, yetkiler ve kullanım: [portal/README.md](portal/README.md).
+
+Kaynak değişikliğinden sonra `npm run build:portal` çalıştırın. Yeni bölümün
+yetki testleri: `npm run test:portal-rules`; emülatörde tarayıcı akışı:
+`npx playwright install chromium --only-shell` ve `npm run test:portal-browser`.
+
 Testler: `npm ci`, `npm test`, `npm run test:rules` (Node.js 22 ve Java 17+). Emulator testleri `demo-arvus` kullanır; gerçek projeye test verisi göndermez.
 
 ## Dosyalar

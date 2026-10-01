@@ -1,0 +1,29 @@
+name: Check ARVUS applications and team portal
+on:
+  pull_request:
+    paths: ['public/**', 'portal/**', 'tests/**', 'package*.json', 'firestore.rules', 'firebase*.json', '.github/workflows/**']
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: npm ci
+      - run: npm test
+      - run: npm run build:portal
+      - name: Check committed browser bundle matches source
+        run: git diff --exit-code -- public/yonetim/app.js
+      - run: npm run test:all-rules
+      - run: npx playwright install --with-deps chromium --only-shell
+      - run: npm run test:portal-browser
