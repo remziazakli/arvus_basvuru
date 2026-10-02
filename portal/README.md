@@ -23,6 +23,21 @@ başvuru sitesinin mevcut yönetici izinlerini değiştirmez.
 
 ## Yetkiler
 
+### Yanlış Google e-postasını düzeltme
+
+**Üyeler → Düzenle → Google e-posta adresi → Kaydet** adımlarını kullan.
+Değişikliği onayladığında eski adresin erişimi kapanır. Yeni adres aynı üyeliği,
+rolü, takımını, görevlerini, yorumlarını, öğrenme adımlarını ve zimmetlerini kullanır.
+Erişimi kapalı bir üyeyi düzeltmek hesabı kendiliğinden etkinleştirmez.
+Başka bir üyeye kayıtlı adres kabul edilmez. Sistem sahibi adresleri ve kendi
+giriş adresin bu ekrandan değiştirilemez. İşlem Google hesabının kendisini veya
+başvuru panelindeki orijinal yanıtı değiştirmez; portalın giriş eşleşmesini düzeltir.
+
+Üyelerin kalıcı kimliği ilk kayıt adresidir; düzeltilmiş Google adresi
+`loginEmail` alanında, eşleşmesi `portalLogins` koleksiyonunda tutulur.
+Yedekler bu eşleşmeleri de içerir. Eski başvuru dosyasını tekrar içe almak
+düzeltilmiş üyeyi çoğaltmaz veya düzeltmeyi geri almaz.
+
 | İşlem | Üye | Mentor | Yönetici |
 |---|---|---|---|
 | Kendi görevini ve çıktısını güncelleme | Evet | Evet | Evet |

@@ -61,17 +61,41 @@ service cloud.firestore {
         && request.auth.token.email_verified == true
         && request.auth.token.firebase.sign_in_provider == 'google.com';
     }
-    function pEmail() { return request.auth.token.email; }
+    function pEmail() {
+      let address = request.auth.token.email;
+      return exists(/databases/$(database)/documents/portalLogins/$(address))
+        ? get(/databases/$(database)/documents/portalLogins/$(address)).data.memberId : address;
+    }
     function pOwner() {
-      return pGoogle() && pEmail() in ['rmzazakli@gmail.com','remziazakli@gmail.com'];
+      return pGoogle() && request.auth.token.email in ['rmzazakli@gmail.com','remziazakli@gmail.com'];
     }
     function pGrant() { return get(/databases/$(database)/documents/portalAccess/$(pEmail())).data; }
-    function pActive() { return pGoogle() && (pOwner() || pGrant().active == true); }
-    function pAdmin() { return pGoogle() && (pEmail() in ['rmzazakli@gmail.com','remziazakli@gmail.com'] || (pGrant().active == true && pGrant().role == 'admin')); }
-    function pLead(team) { return pGoogle() && pGrant().active == true && pGrant().role == 'mentor' && team in pGrant().teamIds; }
-    function pManage(team) { return pGoogle() && (pEmail() in ['rmzazakli@gmail.com','remziazakli@gmail.com'] || (pGrant().active == true && (pGrant().role == 'admin' || (pGrant().role == 'mentor' && team in pGrant().teamIds)))); }
-    function pTask(d) { return pGoogle() && (pEmail() in ['rmzazakli@gmail.com','remziazakli@gmail.com'] || (pGrant().active == true && (pGrant().role == 'admin' || d.assignee == pEmail() || (pGrant().role == 'mentor' && d.teamId in pGrant().teamIds)))); }
-    function pEnrollment(d) { return pGoogle() && (pEmail() in ['rmzazakli@gmail.com','remziazakli@gmail.com'] || (pGrant().active == true && (pGrant().role == 'admin' || d.memberEmail == pEmail() || (pGrant().role == 'mentor' && d.teamId in pGrant().teamIds)))); }
+    function pValidLogin(a,id) { return a.active == true && a.get('loginEmail',id) == request.auth.token.email; }
+    function pMemberActive() {
+      let id = pEmail();
+      return pValidLogin(get(/databases/$(database)/documents/portalAccess/$(id)).data,id);
+    }
+    function pMemberAdmin() {
+      let id = pEmail();
+      let a = get(/databases/$(database)/documents/portalAccess/$(id)).data;
+      return pValidLogin(a,id) && a.role == 'admin';
+    }
+    function pMemberTeam(team,mentorOnly) {
+      let id = pEmail();
+      let a = get(/databases/$(database)/documents/portalAccess/$(id)).data;
+      return pValidLogin(a,id) && ((!mentorOnly && a.role == 'admin') || (a.role == 'mentor' && team in a.teamIds));
+    }
+    function pMemberRecord(member,team) {
+      let id = pEmail();
+      let a = get(/databases/$(database)/documents/portalAccess/$(id)).data;
+      return pValidLogin(a,id) && (a.role == 'admin' || member == id || (a.role == 'mentor' && team in a.teamIds));
+    }
+    function pActive() { return pGoogle() && (pOwner() || pMemberActive()); }
+    function pAdmin() { return pGoogle() && (pOwner() || pMemberAdmin()); }
+    function pLead(team) { return pGoogle() && pMemberTeam(team,true); }
+    function pManage(team) { return pGoogle() && (pOwner() || pMemberTeam(team,false)); }
+    function pTask(d) { return pGoogle() && (pOwner() || pMemberRecord(d.assignee,d.teamId)); }
+    function pEnrollment(d) { return pGoogle() && (pOwner() || pMemberRecord(d.memberEmail,d.teamId)); }
     function pList() { return request.query.limit != null && request.query.limit <= 2000; }
     function pMail(v) { return text(v,3,254) && v.matches('^[^/@\\s]+@[^/@\\s]+[.][^/@\\s]+$') && v == v.lower(); }
     function pDate(v) { return v is string && (v == '' || v.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')); }
@@ -81,9 +105,11 @@ service cloud.firestore {
       return a.active == true && (team in a.teamIds || a.role == 'admin');
     }
     function pAccessValid(d,email) {
-      return d.keys().hasOnly(['name','role','teamIds','active','updatedAt'])
+      return d.keys().hasOnly(['name','role','teamIds','active','updatedAt','loginEmail'])
         && pMail(email) && text(d.name,2,160) && d.role in ['admin','mentor','member']
         && d.teamIds is list && d.teamIds.size() <= 10 && d.active is bool
+        && pMail(d.get('loginEmail',email))
+        && (d.get('loginEmail',email) == email || getAfter(/databases/$(database)/documents/portalLogins/$(d.loginEmail)).data.memberId == email)
         && d.updatedAt == request.time;
     }
     match /portalAccess/{email} {
@@ -91,15 +117,16 @@ service cloud.firestore {
       allow list: if pAdmin() && pList();
       allow create, update: if pAdmin() && pAccessValid(request.resource.data,email)
         && (!(email in ['rmzazakli@gmail.com','remziazakli@gmail.com'])
-          || (request.resource.data.active == true && request.resource.data.role == 'admin'));
+          || (request.resource.data.active == true && request.resource.data.role == 'admin' && request.resource.data.get('loginEmail',email) == email));
       allow delete: if false;
     }
     match /portalMembers/{email} {
       allow get, list: if pActive() && (pAdmin() || email == pEmail()
         || (pGrant().role == 'mentor' && resource.data.teamIds.hasAny(pGrant().teamIds)));
       allow create, update: if pAdmin()
-        && request.resource.data.keys().hasOnly(['name','email','phone','university','department','year','jobTitle','notes','teamIds','updatedAt'])
+        && request.resource.data.keys().hasOnly(['name','email','phone','university','department','year','jobTitle','notes','teamIds','updatedAt','loginEmail'])
         && request.resource.data.email == email && pMail(email)
+        && request.resource.data.get('loginEmail',email) == getAfter(/databases/$(database)/documents/portalAccess/$(email)).data.get('loginEmail',email)
         && text(request.resource.data.name,2,160) && text(request.resource.data.phone,0,40)
         && text(request.resource.data.university,0,160) && text(request.resource.data.department,0,160)
         && text(request.resource.data.year,0,80) && text(request.resource.data.jobTitle,0,160)
@@ -107,6 +134,22 @@ service cloud.firestore {
         && request.resource.data.teamIds == getAfter(/databases/$(database)/documents/portalAccess/$(email)).data.teamIds
         && request.resource.data.updatedAt == request.time;
       allow delete: if false;
+    }
+    match /portalLogins/{address} {
+      allow get: if pGoogle() && (address == request.auth.token.email || pAdmin());
+      allow list: if pAdmin() && pList();
+      allow create, update: if pAdmin() && pMail(address)
+        && !(address in ['rmzazakli@gmail.com','remziazakli@gmail.com'])
+        && request.resource.data.keys().hasOnly(['memberId','updatedAt'])
+        && pMail(request.resource.data.memberId)
+        && !(request.resource.data.memberId in ['rmzazakli@gmail.com','remziazakli@gmail.com'])
+        && request.resource.data.updatedAt == request.time
+        && (!exists(/databases/$(database)/documents/portalAccess/$(address)) || address == request.resource.data.memberId)
+        && (!exists(/databases/$(database)/documents/portalMembers/$(address)) || address == request.resource.data.memberId)
+        && (resource == null || resource.data.memberId == request.resource.data.memberId)
+        && getAfter(/databases/$(database)/documents/portalAccess/$(request.resource.data.memberId)).data.loginEmail == address;
+      allow delete: if pAdmin()
+        && getAfter(/databases/$(database)/documents/portalAccess/$(resource.data.memberId)).data.get('loginEmail',resource.data.memberId) != address;
     }
     match /portalTeams/{id} {
       allow get: if pActive();

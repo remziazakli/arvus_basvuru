@@ -119,6 +119,30 @@ try {
   await owner.locator('#applications-file').setInputFiles({name:'applications.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({app:'ARVUS-APPLICATIONS',version:1,source:'arvus-basvuru',applications:[{fullName:'İçe Aktarılan Üye',email:'imported@example.com',category:'ai'}]}))});
   await save(owner);await nav(owner,'members');const imported=owner.locator('tr').filter({hasText:'imported@example.com'});await imported.waitFor();assert.match(await imported.innerText(),/Erişim kapalı/);
   console.log('PASS complete JSON backup and disabled-by-default applicant import');
+  // Correct a live member account. Existing task, learning and loan IDs stay unchanged.
+  await owner.locator('[data-action=member-edit][data-id="alice@example.com"]').click();
+  await owner.locator('[name=email]').fill('alice.correct@example.com');
+  owner.once('dialog',dialog=>dialog.accept());await save(owner);
+  await member.locator('#portal').waitFor({state:'hidden'});
+  assert.equal(await member.locator('#content').innerText(),'');
+  const corrected=await open('alice.correct@example.com','Test Üye');await ready(corrected);
+  await nav(corrected,'tasks');await corrected.getByRole('heading',{name:'İlk ölçüm çıktısı',exact:true}).waitFor();
+  await corrected.locator('[data-action=task-open]').click();
+  await corrected.locator('#thread').getByText('Mentor, ölçüm sonucunu kontrol eder misin?').waitFor();
+  await corrected.locator('#close-modal').click();
+  await nav(corrected,'learning');await corrected.locator('[data-action=enroll-open]').click();
+  await corrected.getByText('1. adım · Onaylandı',{exact:true}).waitFor();await corrected.locator('#close-modal').click();
+  await nav(corrected,'equipment');await corrected.getByText('Test Geliştirme Kartı',{exact:true}).first().waitFor();
+  // An imported, inactive account remains inactive after its address is fixed.
+  await owner.locator('[data-action=member-edit][data-id="imported@example.com"]').click();
+  await owner.locator('[name=email]').fill('imported.correct@example.com');owner.once('dialog',dialog=>dialog.accept());await save(owner);
+  assert.match(await owner.locator('tr').filter({hasText:'imported.correct@example.com'}).innerText(),/Erişim kapalı/);
+  // Revert for the existing revocation scenario; this also tests removing the alias.
+  await owner.locator('[data-action=member-edit][data-id="alice@example.com"]').click();
+  await owner.locator('[name=email]').fill('alice@example.com');owner.once('dialog',dialog=>dialog.accept());await save(owner);
+  await corrected.locator('#portal').waitFor({state:'hidden'});
+  await member.reload();await ready(member);
+  console.log('PASS admin email correction preserves history, revokes old login and keeps inactive imports closed');
   await nav(member,'tasks');await member.locator('[data-action=task-open]').click();
   await owner.locator('[data-action=member-edit][data-id="alice@example.com"]').click();await owner.locator('[name=active]').selectOption('no');await save(owner);
   await member.locator('#portal').waitFor({state:'hidden'});assert.equal(await member.locator('#content').innerText(),'');assert.equal(await member.locator('#modal').isVisible(),false);assert.equal(await member.locator('#modal-content').innerText(),'');
