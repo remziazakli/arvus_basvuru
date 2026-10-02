@@ -3,6 +3,7 @@ import {before,after,beforeEach,test} from 'node:test';
 import assert from 'node:assert/strict';
 import {initializeTestEnvironment,assertFails,assertSucceeds} from '@firebase/rules-unit-testing';
 import {doc,setDoc,getDoc,getDocs,updateDoc,collection,query,where,limit,writeBatch,runTransaction,serverTimestamp,Timestamp} from 'firebase/firestore';
+import {saveMember} from '../portal/members.js';
 
 let env;
 const owner='rmzazakli@gmail.com',alice='alice@example.com',bob='bob@example.com',mentor='mentor@example.com',other='other@example.com';
@@ -14,6 +15,56 @@ const enrollment=()=>({name:'Başlangıç rotası',routeId:'r1',teamId:'ai',memb
 const step=(status='todo')=>({index:0,title:'İlk çıktı',status,evidence:status==='todo'?'':'Test çıktısı hazır',evidenceUrl:'',feedback:'',reviewerEmail:'',reviewedAt:null,updatedAt:now});
 const asset=()=>({name:'Geliştirme kartı',code:'ARV-001',location:'Lab',condition:'ready',note:'',activeLoanId:'',updatedAt:now});
 function db(email,extra={}){return env.authenticatedContext(email,{email,email_verified:true,firebase:{sign_in_provider:'google.com'},...extra}).firestore();}
+async function correctAddress(memberId,address,role='member',active=true){
+  const d=db(owner),a=await getDoc(doc(d,'portalAccess',memberId)),m=await getDoc(doc(d,'portalMembers',memberId));
+  return saveMember(d,{id:memberId,values:{...m.data(),email:address,role,active:active?'yes':'no'},teamIds:a.data().teamIds,expectedAccess:a.data().updatedAt.toMillis(),expectedProfile:m.data().updatedAt.toMillis(),actor:owner,checkSession:()=>{}});
+}
+test('admin corrects Google login without changing member records or task ownership',async()=>{
+  await correctAddress(alice,'alice.correct@example.com');
+  const next=db('alice.correct@example.com');
+  await assertSucceeds(getDoc(doc(next,'portalMembers',alice)));
+  await assertSucceeds(getDocs(query(collection(next,'portalTasks'),where('assignee','==',alice),limit(100))));
+  await assertSucceeds(updateDoc(doc(next,'portalTasks','own'),{evidence:'Düzeltilen hesap çıktı ekledi',updatedAt:serverTimestamp()}));
+  await assertSucceeds(getDoc(doc(next,'portalEnrollments','en1','steps','0')));
+  await assertFails(getDoc(doc(db(alice),'portalTasks','own')));
+  await assertFails(getDoc(doc(db(alice),'portalMembers',alice)));
+  const a=await getDoc(doc(db(owner),'portalAccess',alice));assert.equal(a.data().loginEmail,'alice.correct@example.com');
+  assert.equal((await getDoc(doc(db(owner),'portalTasks','own'))).data().assignee,alice);
+  // Repeated correction revokes the previous alias; reverting to the original address is supported.
+  await correctAddress(alice,'alice.second@example.com');
+  await assertFails(getDoc(doc(next,'portalTasks','own')));
+  await assertSucceeds(getDoc(doc(db('alice.second@example.com'),'portalTasks','own')));
+  await correctAddress(alice,alice);
+  await assertSucceeds(getDoc(doc(db(alice),'portalTasks','own')));
+  await assertFails(getDoc(doc(db('alice.second@example.com'),'portalTasks','own')));
+});
+test('correction preserves disabled access and prevents existing-account collisions',async()=>{
+  await correctAddress(alice,'inactive.correct@example.com','member',false);
+  await assertFails(getDoc(doc(db('inactive.correct@example.com'),'portalTasks','own')));
+  await assert.rejects(correctAddress(alice,bob),/başka bir üyeye/);
+  await assert.rejects(correctAddress(bob,'inactive.correct@example.com'),/başka bir üyeye/);
+  assert.equal((await getDoc(doc(db(owner),'portalAccess',alice))).data().loginEmail,'inactive.correct@example.com');
+});
+test('members and mentors cannot create login aliases or change their login address',async()=>{
+  for(const who of [alice,mentor]){
+    await assertFails(setDoc(doc(db(who),'portalLogins','takeover@example.com'),{memberId:alice,updatedAt:serverTimestamp()}));
+    await assertFails(updateDoc(doc(db(who),'portalAccess',alice),{loginEmail:'takeover@example.com',updatedAt:serverTimestamp()}));
+  }
+  await assertFails(getDocs(query(collection(db(alice),'portalLogins'),limit(100))));
+});
+test('rules reject detached aliases, owner aliases and overwriting another member login',async()=>{
+  const d=db(owner);
+  await assertFails(setDoc(doc(d,'portalLogins','fake@example.com'),{memberId:alice,updatedAt:serverTimestamp()}));
+  await assertFails(updateDoc(doc(d,'portalAccess',alice),{loginEmail:'fake@example.com',updatedAt:serverTimestamp()}));
+  const batch=writeBatch(d);batch.update(doc(d,'portalAccess',alice),{loginEmail:bob,updatedAt:serverTimestamp()});batch.set(doc(d,'portalLogins',bob),{memberId:alice,updatedAt:serverTimestamp()});await assertFails(batch.commit());
+  await assertFails(setDoc(doc(d,'portalLogins',owner),{memberId:alice,updatedAt:serverTimestamp()}));
+});
+test('corrected administrator loses access at old email and keeps role at new email',async()=>{
+  await correctAddress(alice,'admin.correct@example.com','admin');
+  await assertFails(getDocs(query(collection(db(alice),'portalMembers'),limit(100))));
+  await assertSucceeds(getDocs(query(collection(db('admin.correct@example.com'),'portalMembers'),limit(100))));
+  await assertFails(updateDoc(doc(db(alice),'portalAccess',bob),{active:false,updatedAt:serverTimestamp()}));
+});
 before(async()=>{env=await initializeTestEnvironment({projectId:'demo-arvus',firestore:{host:'127.0.0.1',port:8088,rules:await readFile('firestore.rules','utf8')}});});
 after(async()=>env?.cleanup());
 beforeEach(async()=>{await env.clearFirestore();await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();await Promise.all([
