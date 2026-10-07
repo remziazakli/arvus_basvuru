@@ -113,9 +113,41 @@ try {
   await owner.locator('[name=condition]').selectOption('maintenance');await owner.locator('[name=note]').fill('Bağlantı kablosu kontrol edilecek.');await save(owner);
   await owner.locator('article').getByText('Bakımda',{exact:true}).waitFor();assert.equal(await owner.locator('[data-action=loan-new]').count(),0);
   console.log('PASS custody, member return request and admin maintenance return');
+  // Admin-only cash book, exact cents, persistent cancellation and complete backup.
+  assert.equal(await member.locator('[data-nav=finance]').count(),0);
+  assert.equal(await mentor.locator('[data-nav=finance]').count(),0);
+  await nav(owner,'finance');await owner.getByText('Henüz para hareketi yok',{exact:true}).waitFor();
+  const addMoney=async(kind,amount,account,description)=>{
+    await owner.locator('[data-action=finance-'+kind+']').click();
+    await owner.locator('[name=amount]').fill(amount);await owner.locator('[name=counterparty]').fill('Test Kurumu');
+    await owner.locator('[name=account]').selectOption(account);await owner.locator('[name=description]').fill(description);await save(owner);
+  };
+  await addMoney('income','1250,50','bank','Sponsor desteği');
+  await addMoney('expense','200,10','bank','Malzeme ödemesi');
+  await addMoney('income','100','cash','Nakit destek');
+  const balance=()=>owner.locator('.focus-card').filter({hasText:'Kalan bakiye'}).locator('.op-stat');
+  assert.match(await balance().innerText(),/1\.150,40/);
+  await owner.reload();await ready(owner);await nav(owner,'finance');await owner.getByText('Malzeme ödemesi',{exact:true}).waitFor();
+  assert.match(await balance().innerText(),/1\.150,40/);
+  await owner.locator('tr').filter({hasText:'Malzeme ödemesi'}).locator('[data-action=finance-void]').click();
+  await owner.locator('[name=reason]').fill('Yanlış tutar girilmiş');await save(owner);
+  assert.match(await balance().innerText(),/1\.350,50/);
+  await owner.getByText('Yanlış tutar girilmiş',{exact:false}).waitFor();
+  if(process.env.PORTAL_SCREENSHOT_DIR){
+    await owner.screenshot({path:resolve(process.env.PORTAL_SCREENSHOT_DIR,'portal-finance.png'),fullPage:true});
+    await owner.emulateMedia({reducedMotion:"reduce"});
+    await owner.setViewportSize({width:390,height:844});
+    await owner.screenshot({path:resolve(process.env.PORTAL_SCREENSHOT_DIR,'portal-finance-mobile.png'),fullPage:true});
+    await owner.setViewportSize({width:1440,height:1000});
+  }
+  const financeDownload=owner.waitForEvent('download');await owner.locator('[data-action=finance-export]').click();
+  const financeBackup=JSON.parse(await readFile(await (await financeDownload).path(),'utf8'));
+  assert.equal(financeBackup.records.length,3);assert.equal(financeBackup.records.filter(r=>r.voidedAt).length,1);
+  console.log('PASS finance income, expense, exact balance, reload, void audit and export');
   await nav(owner,'settings');const downloadPromise=owner.waitForEvent('download');await owner.locator('[data-action=backup]').click();
   const download=await downloadPromise;const backup=JSON.parse(await readFile(await download.path(),'utf8'));
   assert.equal(backup.app,'ARVUS-CLOUD');assert.equal(backup.data.Tasks.length,1);assert.equal(Object.values(backup.data.comments).flat().length,1);assert.equal(backup.data.Loans.length,1);
+  assert.equal(backup.data.Finance.length,3);
   await owner.locator('#applications-file').setInputFiles({name:'applications.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({app:'ARVUS-APPLICATIONS',version:1,source:'arvus-basvuru',applications:[{fullName:'İçe Aktarılan Üye',email:'imported@example.com',category:'ai'}]}))});
   await save(owner);await nav(owner,'members');const imported=owner.locator('tr').filter({hasText:'imported@example.com'});await imported.waitFor();assert.match(await imported.innerText(),/Erişim kapalı/);
   console.log('PASS complete JSON backup and disabled-by-default applicant import');
@@ -143,6 +175,22 @@ try {
   await corrected.locator('#portal').waitFor({state:'hidden'});
   await member.reload();await ready(member);
   console.log('PASS admin email correction preserves history, revokes old login and keeps inactive imports closed');
+  assert.equal(await owner.locator('[data-action=member-delete][data-id="rmzazakli@gmail.com"]').count(),0);
+  await owner.locator('[data-action=member-delete][data-id="alice@example.com"]').click();
+  await owner.locator('[name=confirm]').check();await save(owner);
+  await member.locator('#portal').waitFor({state:'hidden'});assert.equal(await member.locator('#content').innerText(),'');
+  await owner.locator('[data-action=member-edit][data-id="alice@example.com"]').waitFor({state:'hidden'});
+  await owner.locator('#show-removed').check();
+  await owner.locator('[data-action=member-restore][data-id="alice@example.com"]').click();
+  await owner.locator('[name=confirm]').check();await save(owner);
+  await owner.locator('#show-removed').uncheck();
+  await owner.locator('[data-action=member-edit][data-id="alice@example.com"]').waitFor();
+  assert.match(await owner.locator('tr').filter({hasText:'alice@example.com'}).innerText(),/Erişim kapalı/);
+  await member.reload();await member.getByText('Bu Google hesabının takım erişimi yok veya pasife alınmış. Yöneticiye e-posta adresini ilet.').waitFor();
+  await owner.locator('[data-action=member-edit][data-id="alice@example.com"]').click();
+  await owner.locator('[name=active]').selectOption('yes');await save(owner);
+  await member.reload();await ready(member);
+  console.log('PASS member removal, live revocation, archived list and inactive restoration');
   await nav(member,'tasks');await member.locator('[data-action=task-open]').click();
   await owner.locator('[data-action=member-edit][data-id="alice@example.com"]').click();await owner.locator('[name=active]').selectOption('no');await save(owner);
   await member.locator('#portal').waitFor({state:'hidden'});assert.equal(await member.locator('#content').innerText(),'');assert.equal(await member.locator('#modal').isVisible(),false);assert.equal(await member.locator('#modal-content').innerText(),'');
