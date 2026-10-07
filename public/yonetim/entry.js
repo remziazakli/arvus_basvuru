@@ -13,7 +13,7 @@ export function portalDestination(href) {
 if (typeof window !== 'undefined') {
   const destination = portalDestination(window.location.href);
   if (destination) window.location.replace(destination);
-  else import('./app.js?v=3').catch(() => {
+  else import('./app.js?v=4').catch(() => {
     document.getElementById('auth-message').textContent =
       'Panel yüklenemedi. İnternet bağlantını kontrol edip sayfayı yenile.';
   });

@@ -2,8 +2,8 @@ import {readFile} from 'node:fs/promises';
 import {before,after,beforeEach,test} from 'node:test';
 import assert from 'node:assert/strict';
 import {initializeTestEnvironment,assertFails,assertSucceeds} from '@firebase/rules-unit-testing';
-import {doc,setDoc,getDoc,getDocs,updateDoc,collection,query,where,limit,writeBatch,runTransaction,serverTimestamp,Timestamp} from 'firebase/firestore';
-import {saveMember} from '../portal/members.js';
+import {doc,setDoc,getDoc,getDocs,updateDoc,deleteDoc,collection,query,where,limit,writeBatch,runTransaction,serverTimestamp,Timestamp} from 'firebase/firestore';
+import {saveMember,setMemberDeleted} from '../portal/members.js';
 
 let env;
 const owner='rmzazakli@gmail.com',alice='alice@example.com',bob='bob@example.com',mentor='mentor@example.com',other='other@example.com';
@@ -14,11 +14,72 @@ const task=(assignee=alice,teamId='ai')=>({title:'Test görev',description:'Öl�
 const enrollment=()=>({name:'Başlangıç rotası',routeId:'r1',teamId:'ai',memberEmail:alice,mentorEmail:mentor,due:'2026-10-10',stepCount:1,createdAt:now});
 const step=(status='todo')=>({index:0,title:'İlk çıktı',status,evidence:status==='todo'?'':'Test çıktısı hazır',evidenceUrl:'',feedback:'',reviewerEmail:'',reviewedAt:null,updatedAt:now});
 const asset=()=>({name:'Geliştirme kartı',code:'ARV-001',location:'Lab',condition:'ready',note:'',activeLoanId:'',updatedAt:now});
+const finance=()=>({kind:'income',amountCents:125050,currency:'TRY',date:'2026-10-07',account:'bank',category:'sponsor',teamId:'ai',counterparty:'Test Sponsor',description:'Takım desteği',receiptUrl:'',createdBy:owner,createdAt:serverTimestamp(),voidedAt:null,voidedBy:'',voidReason:''});
+test('finance is admin-only, including direct reads, queries and writes',async()=>{
+  await assertSucceeds(setDoc(doc(db(owner),'portalFinance','f1'),finance()));
+  await assertSucceeds(getDocs(query(collection(db(owner),'portalFinance'),limit(100))));
+  for(const d of [db(alice),db(mentor),db(other),db('stranger@example.com'),env.unauthenticatedContext().firestore(),db(owner,{email_verified:false})]){
+    await assertFails(getDoc(doc(d,'portalFinance','f1')));
+    await assertFails(getDocs(query(collection(d,'portalFinance'),limit(100))));
+    await assertFails(setDoc(doc(d,'portalFinance','f2'),finance()));
+    await assertFails(updateDoc(doc(d,'portalFinance','f1'),{voidedAt:serverTimestamp(),voidedBy:alice,voidReason:'Yanlış kayıt'}));
+  }
+});
+test('finance validates cents, identity, account, category and team on the server',async()=>{
+  for(const extra of [{amountCents:0},{amountCents:-1},{amountCents:1.5},{amountCents:1000000001},{currency:'USD'},{account:'fake'},{kind:'expense'},{teamId:'missing'},{createdBy:alice},{createdAt:now},{voidedAt:now},{receiptUrl:'javascript:alert(1)'},{extra:true},{description:''}])await assertFails(setDoc(doc(db(owner),'portalFinance','invalid'),{...finance(),...extra}));
+  await assertSucceeds(setDoc(doc(db(owner),'portalFinance','expense'),{...finance(),kind:'expense',category:'materials',account:'cash',teamId:''}));
+});
+test('finance amounts cannot be edited or deleted; voids preserve attributed history',async()=>{
+  const d=db(owner),r=doc(d,'portalFinance','f1');await assertSucceeds(setDoc(r,finance()));
+  await assertFails(updateDoc(r,{amountCents:1}));await assertFails(deleteDoc(r));
+  await assertFails(updateDoc(r,{voidedAt:serverTimestamp(),voidedBy:alice,voidReason:'Yanlış kayıt'}));
+  await assertFails(updateDoc(r,{voidedAt:serverTimestamp(),voidedBy:owner,voidReason:'x'}));
+  await assertSucceeds(updateDoc(r,{voidedAt:serverTimestamp(),voidedBy:owner,voidReason:'Yanlış tutar girildi'}));
+  assert.equal((await getDoc(r)).data().amountCents,125050);
+  await assertFails(updateDoc(r,{voidedAt:null,voidedBy:'',voidReason:''}));
+  await assertFails(updateDoc(r,{voidReason:'Geçmişi değiştir'}));
+});
 function db(email,extra={}){return env.authenticatedContext(email,{email,email_verified:true,firebase:{sign_in_provider:'google.com'},...extra}).firestore();}
 async function correctAddress(memberId,address,role='member',active=true){
   const d=db(owner),a=await getDoc(doc(d,'portalAccess',memberId)),m=await getDoc(doc(d,'portalMembers',memberId));
   return saveMember(d,{id:memberId,values:{...m.data(),email:address,role,active:active?'yes':'no'},teamIds:a.data().teamIds,expectedAccess:a.data().updatedAt.toMillis(),expectedProfile:m.data().updatedAt.toMillis(),actor:owner,checkSession:()=>{}});
 }
+async function removeMember(id,deleted=true,actor=owner){
+  const d=db(actor),a=await getDoc(doc(d,'portalAccess',id)),m=await getDoc(doc(d,'portalMembers',id));
+  return setMemberDeleted(d,{id,deleted,actor,expectedAccess:a.data().updatedAt.toMillis(),expectedProfile:m.data().updatedAt.toMillis(),checkSession:()=>{}});
+}
+test('member deletion revokes a corrected Google login and preserves linked history',async()=>{
+  await correctAddress(alice,'alice.correct@example.com');await removeMember(alice);
+  await assertFails(getDoc(doc(db('alice.correct@example.com'),'portalTasks','own')));
+  assert.equal((await getDoc(doc(db(owner),'portalAccess',alice))).data().active,false);
+  assert.equal((await getDoc(doc(db(owner),'portalMembers',alice))).data().deleted,true);
+  assert.equal((await getDoc(doc(db(owner),'portalTasks','own'))).data().assignee,alice);
+  await assertSucceeds(getDoc(doc(db(owner),'portalEnrollments','en1')));
+  await assert.rejects(correctAddress(alice,'alice.correct@example.com'),/silinmiş/);
+  await removeMember(alice,false);
+  await assertFails(getDoc(doc(db('alice.correct@example.com'),'portalTasks','own')));
+  await correctAddress(alice,'alice.correct@example.com');
+  await assertSucceeds(getDoc(doc(db('alice.correct@example.com'),'portalTasks','own')));
+});
+test('member deletion requires admin, paired writes, truthful audit and inactive access',async()=>{
+  const patch={deleted:true,active:false,deletedAt:serverTimestamp(),deletedBy:owner,updatedAt:serverTimestamp()};
+  const d=db(owner);
+  await assertFails(updateDoc(doc(d,'portalAccess',alice),patch));
+  for(const [actor,extra] of [[mentor,{}],[owner,{active:true}],[owner,{deletedBy:alice}],[owner,{deletedAt:now}]]){
+    const actorDb=db(actor),batch=writeBatch(actorDb);batch.update(doc(actorDb,'portalAccess',alice),{...patch,...extra});batch.update(doc(actorDb,'portalMembers',alice),{deleted:true,updatedAt:serverTimestamp()});await assertFails(batch.commit());
+  }
+  await removeMember(alice);
+  await assertFails(updateDoc(doc(d,'portalAccess',alice),{active:true,updatedAt:serverTimestamp()}));
+  await assertFails(updateDoc(doc(d,'portalAccess',alice),{deleted:false,updatedAt:serverTimestamp()}));
+  await assertFails(deleteDoc(doc(d,'portalMembers',alice)));
+});
+test('owners and the acting administrator cannot be deleted even with direct database writes',async()=>{
+  await correctAddress(alice,alice,'admin');
+  for(const id of [alice,owner]){
+    await env.withSecurityRulesDisabled(async c=>{if(id===owner){await setDoc(doc(c.firestore(),'portalAccess',owner),grant('Owner','admin'));await setDoc(doc(c.firestore(),'portalMembers',owner),profile(owner));}});
+    const d=db(alice),batch=writeBatch(d);batch.update(doc(d,'portalAccess',id),{deleted:true,active:false,deletedAt:serverTimestamp(),deletedBy:alice,updatedAt:serverTimestamp()});batch.update(doc(d,'portalMembers',id),{deleted:true,updatedAt:serverTimestamp()});await assertFails(batch.commit());
+  }
+});
 test('admin corrects Google login without changing member records or task ownership',async()=>{
   await correctAddress(alice,'alice.correct@example.com');
   const next=db('alice.correct@example.com');

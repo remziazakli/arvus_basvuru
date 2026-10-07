@@ -104,13 +104,24 @@ service cloud.firestore {
       let a = get(/databases/$(database)/documents/portalAccess/$(email)).data;
       return a.active == true && (team in a.teamIds || a.role == 'admin');
     }
+    function pDeletionValid(d,id) {
+      let old = resource == null ? {} : resource.data;
+      let deleted = d.get('deleted',false);
+      let sameAudit = d.get('deletedAt',null) == old.get('deletedAt',null) && d.get('deletedBy','') == old.get('deletedBy','');
+      return deleted is bool
+        && ((!deleted && !old.get('deleted',false)) || deleted == getAfter(/databases/$(database)/documents/portalMembers/$(id)).data.get('deleted',false))
+        && (!deleted || d.active == false)
+        && (deleted == old.get('deleted',false) ? sameAudit
+          : (id != pEmail() && !(id in ['rmzazakli@gmail.com','remziazakli@gmail.com']) && d.active == false
+            && (deleted ? d.deletedAt == request.time && d.deletedBy == pEmail() : sameAudit)));
+    }
     function pAccessValid(d,email) {
-      return d.keys().hasOnly(['name','role','teamIds','active','updatedAt','loginEmail'])
+      return d.keys().hasOnly(['name','role','teamIds','active','updatedAt','loginEmail','deleted','deletedAt','deletedBy'])
         && pMail(email) && text(d.name,2,160) && d.role in ['admin','mentor','member']
         && d.teamIds is list && d.teamIds.size() <= 10 && d.active is bool
         && pMail(d.get('loginEmail',email))
         && (d.get('loginEmail',email) == email || getAfter(/databases/$(database)/documents/portalLogins/$(d.loginEmail)).data.memberId == email)
-        && d.updatedAt == request.time;
+        && d.updatedAt == request.time && pDeletionValid(d,email);
     }
     match /portalAccess/{email} {
       allow get: if pGoogle() && (email == pEmail() || pAdmin());
@@ -124,7 +135,9 @@ service cloud.firestore {
       allow get, list: if pActive() && (pAdmin() || email == pEmail()
         || (pGrant().role == 'mentor' && resource.data.teamIds.hasAny(pGrant().teamIds)));
       allow create, update: if pAdmin()
-        && request.resource.data.keys().hasOnly(['name','email','phone','university','department','year','jobTitle','notes','teamIds','updatedAt','loginEmail'])
+        && request.resource.data.keys().hasOnly(['name','email','phone','university','department','year','jobTitle','notes','teamIds','updatedAt','loginEmail','deleted'])
+        && request.resource.data.get('deleted',false) is bool
+        && request.resource.data.get('deleted',false) == getAfter(/databases/$(database)/documents/portalAccess/$(email)).data.get('deleted',false)
         && request.resource.data.email == email && pMail(email)
         && request.resource.data.get('loginEmail',email) == getAfter(/databases/$(database)/documents/portalAccess/$(email)).data.get('loginEmail',email)
         && text(request.resource.data.name,2,160) && text(request.resource.data.phone,0,40)
@@ -299,6 +312,30 @@ service cloud.firestore {
           && (request.resource.data.returnCondition != 'maintenance' || request.resource.data.returnNote.size() > 0)
           && getAfter(/databases/$(database)/documents/portalEquipment/$(resource.data.equipmentId)).data.activeLoanId == ''
           && getAfter(/databases/$(database)/documents/portalEquipment/$(resource.data.equipmentId)).data.condition == request.resource.data.returnCondition));
+      allow delete: if false;
+    }
+    function pFinance(d) {
+      return d.keys().hasOnly(['kind','amountCents','currency','date','account','category','teamId','counterparty','description','receiptUrl','createdBy','createdAt','voidedAt','voidedBy','voidReason'])
+        && d.kind in ['income','expense'] && d.amountCents is int
+        && d.amountCents >= 1 && d.amountCents <= 1000000000 && d.currency == 'TRY'
+        && d.date is string && d.date.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$')
+        && d.account in ['bank','cash']
+        && ((d.kind == 'income' && d.category in ['sponsor','dues','donation','opening','other'])
+          || (d.kind == 'expense' && d.category in ['materials','travel','event','other']))
+        && text(d.teamId,0,100) && (d.teamId == '' || exists(/databases/$(database)/documents/portalTeams/$(d.teamId)))
+        && text(d.counterparty,2,160) && text(d.description,2,1000) && pLink(d.receiptUrl)
+        && d.createdBy == pEmail() && d.createdAt == request.time
+        && d.voidedAt == null && d.voidedBy == '' && d.voidReason == '';
+    }
+    match /portalFinance/{id} {
+      allow get: if pAdmin();
+      allow list: if pAdmin() && pList();
+      allow create: if pAdmin() && pFinance(request.resource.data);
+      // Financial details are immutable. Corrections leave an attributed void record.
+      allow update: if pAdmin() && resource.data.voidedAt == null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['voidedAt','voidedBy','voidReason'])
+        && request.resource.data.voidedAt == request.time
+        && request.resource.data.voidedBy == pEmail() && text(request.resource.data.voidReason,5,500);
       allow delete: if false;
     }
     match /portalSeen/{email}/items/{id} {
