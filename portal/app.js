@@ -149,8 +149,36 @@ function memberForm(id){const m=data.members.find(x=>x.email===id),a=data.access
   const token=epoch;await saveMember(service.db,{id,values:v,teamIds:fd.getAll('teamIds'),expectedAccess:stamp(a?.updatedAt),expectedProfile:stamp(m?.updatedAt),actor:email(),actorLogin:user.email,checkSession:()=>assertSession(token)});
 });if(id&&(OWNER_EMAILS.includes(id)||id===email()))$('form').elements.email.readOnly=true;}
 
-function taskForm(id){const t=data.tasks.find(x=>x.id===id),teams=editableTeams();if(!t&&!teams.length){toast('Önce bir takım oluştur veya takım sorumluluğu ata.');return;}const full=!t||canManage(grant,t.teamId);let html=full?field('Görev adı *','title',t?.title,'text',true)+select('Takım','teamId',t?.teamId||teams[0]?.id,teams.map(t=>[t.id,t.name]))+select('Sorumlu','assignee',t?.assignee,activeMembers().map(m=>[m.email,m.name]))+field('Hedef tarih','due',t?.due,'date')+area('Görev açıklaması','description',t?.description):`<p class="op-muted wide">${E(t.title)}</p>`;html+=select('Durum','status',t?.status||'todo',Object.entries(STATUS))+area('Takıldığın yer / destek ihtiyacı','blocker',t?.blocker,1000)+area('Çıktı notu','evidence',t?.evidence)+field('Çıktı bağlantısı (isteğe bağlı)','evidenceUrl',t?.evidenceUrl,'url',false,1000);
-  form(t?'Görevi güncelle':'Yeni görev',html,async v=>{if(v.status==='done'&&v.blocker)throw Error('Tamamlamadan önce engel açıklamasını temizle.');if(v.evidenceUrl&&!safeURL(v.evidenceUrl))throw Error('Bağlantı https:// veya http:// ile başlamalı.');if(full&&!activeMembers(v.teamId).some(m=>m.email===v.assignee))throw Error('Sorumlu seçilen takımın aktif üyesi olmalı.');if(!t)Object.assign(v,{createdAt:serverTimestamp(),lastCommentId:'',lastCommentBy:'',lastCommentAt:null});await change('portalTasks/'+(id||crypto.randomUUID()),v,t?stamp(t.updatedAt):null,!t);});}
+function taskForm(id){
+  const t=data.tasks.find(x=>x.id===id),teams=editableTeams();
+  if(!t&&!teams.length){toast('Önce bir takım oluştur veya takım sorumluluğu ata.');return;}
+  const full=!t||canManage(grant,t.teamId),bulkOptions=!t?teams.map(team=>[`team:${team.id}`,`Tüm aktif üyeler · ${team.name} (${activeMembers(team.id).length} kişi)`]):[];
+  const memberOptions=activeMembers().map(m=>[m.email,`${m.name} · ${m.teamIds.map(teamName).join(', ')||'Takımsız'}`]);
+  let html=full?field('Görev adı *','title',t?.title,'text',true)+select('Takım','teamId',t?.teamId||teams[0]?.id,teams.map(t=>[t.id,t.name]))+select('Sorumlu / toplu atama','assignee',t?.assignee,[...bulkOptions,...memberOptions])+field('Hedef tarih','due',t?.due,'date')+area('Görev açıklaması','description',t?.description)+(t?'':'<p class="op-help wide">“Tüm aktif üyeler” seçersen aynı görev, seçtiğin takımın her aktif üyesi için ayrı görev kaydı olarak oluşturulur. Böylece herkes kendi durumunu ve çıktısını günceller.</p>'): `<p class="op-muted wide">${E(t.title)}</p>`;
+  html+=select('Durum','status',t?.status||'todo',Object.entries(STATUS))+area('Takıldığın yer / destek ihtiyacı','blocker',t?.blocker,1000)+area('Çıktı notu','evidence',t?.evidence)+field('Çıktı bağlantısı (isteğe bağlı)','evidenceUrl',t?.evidenceUrl,'url',false,1000);
+  form(t?'Görevi güncelle':'Yeni görev',html,async v=>{
+    if(v.status==='done'&&v.blocker)throw Error('Tamamlamadan önce engel açıklamasını temizle.');
+    if(v.evidenceUrl&&!safeURL(v.evidenceUrl))throw Error('Bağlantı https:// veya http:// ile başlamalı.');
+    if(t){
+      if(full&&!activeMembers(v.teamId).some(m=>m.email===v.assignee))throw Error('Sorumlu seçilen takımın aktif üyesi olmalı.');
+      await change(`portalTasks/${id}`,v,stamp(t.updatedAt));
+      return;
+    }
+    const bulkTeam=v.assignee.startsWith('team:')?v.assignee.slice(5):'';
+    const recipients=bulkTeam?activeMembers(bulkTeam):activeMembers(v.teamId).filter(m=>m.email===v.assignee);
+    if(bulkTeam&&bulkTeam!==v.teamId)throw Error('Toplu atamada takım ve “Tüm aktif üyeler” seçimi aynı takım olmalı.');
+    if(!recipients.length)throw Error('Sorumlu seçilen takımın aktif üyesi olmalı.');
+    if(recipients.length>450)throw Error('Tek seferde en fazla 450 üyeye görev atanabilir.');
+    const {assignee:_,...taskValues}=v,token=epoch;
+    await runTransaction(service.db,async tx=>{
+      assertSession(token);
+      for(const member of recipients){
+        const taskRef=doc(service.db,'portalTasks',crypto.randomUUID());
+        tx.set(taskRef,{...taskValues,assignee:member.email,createdAt:serverTimestamp(),updatedAt:serverTimestamp(),lastCommentId:'',lastCommentBy:'',lastCommentAt:null});
+      }
+    });
+  });
+}
 let commentOff=null;
 function taskDetail(id){const t=data.tasks.find(t=>t.id===id);if(!t)return;openModal(t.title,`<div class="op-meta">${tag(teamName(t.teamId))}${tag(STATUS[t.status],t.status)}</div><p class="op-muted" style="margin:16px 0">Sorumlu: ${E(personName(t.assignee))} · Hedef: ${date(t.due)}</p><p class="detail-text">${E(t.description)}</p>${t.blocker?`<p class="op-danger">${E(t.blocker)}</p>`:''}<div class="answer"><h3>Çıktı</h3><p>${E(t.evidence||'Henüz çıktı eklenmedi.')}</p>${safeURL(t.evidenceUrl)?`<a href="${E(safeURL(t.evidenceUrl))}" target="_blank" rel="noopener noreferrer" class="text-button">Çıktı bağlantısını aç ↗</a>`:''}</div>${button('Görevi güncelle','task-edit',id,true)}<h3 style="margin:25px 0 10px;font-size:16px">Görev konuşması</h3><div id="thread">Yorumlar yükleniyor…</div><form id="comment-form"><label class="form-field"><span>Yorumun</span><textarea name="body" required maxlength="2000" placeholder="Kısa bir güncelleme, soru veya çıktı bağlantısı…"></textarea></label><p class="error" id="form-error" role="alert"></p><div class="form-actions"><button class="btn primary" type="submit">Yorum ekle</button></div></form>`,'task',id);
   commentOff?.();const token=epoch;commentOff=onSnapshot(query(collection(service.db,'portalTasks',id,'comments'),orderBy('createdAt','desc'),limit(100)),{includeMetadataChanges:true},s=>{if(token!==epoch||modalMode!=='task'||modalId!==id||s.metadata.fromCache||s.metadata.hasPendingWrites)return;const list=s.docs.map(x=>x.data()).reverse();$('thread').innerHTML=list.map(c=>`<article class="comment"><strong>${E(personName(c.author))}</strong><small>${date(c.createdAt)}</small><p>${E(c.body)}</p></article>`).join('')||'<p class="op-muted">İlk güncellemeyi sen paylaş.</p>';if(list.length===100)$('thread').insertAdjacentHTML('afterbegin','<p class="op-help">En son 100 yorum gösteriliyor.</p>');},e=>{if(token===epoch)lock(errText(e));});subscriptions.push(()=>commentOff?.());}
