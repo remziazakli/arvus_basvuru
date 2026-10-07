@@ -69,12 +69,19 @@ try {
   await invite('mentor@example.com','Test Mentor','mentor');
   await invite('alice@example.com','Test Üye');
   await invite('bob@example.com','Başka Takım Üyesi','member','ew');
+  await invite('charlie@example.com','Elektronik Harp Üyesi 2','member','ew');
   const mentor=await open('mentor@example.com','Test Mentor');await ready(mentor);
   const member=await open('alice@example.com','Test Üye',390);await ready(member);
   const outsider=await open('outsider@example.com','Yetkisiz Test');
   await outsider.getByText('Bu Google hesabının takım erişimi yok veya pasife alınmış. Yöneticiye e-posta adresini ilet.').waitFor();
   assert.equal(await outsider.locator('#content').innerText(),'');
   console.log('PASS invitations, real SDK sign-in, role navigation and outsider gate');
+  await nav(owner,'tasks');await owner.locator('[data-action=task-new]').click();
+  await owner.locator('[name=title]').fill('Elektronik Harp ortak görev');
+  await owner.locator('[name=teamId]').selectOption('ew');
+  await owner.locator('[name=assignee]').selectOption('team:ew');await save(owner);
+  assert.equal(await owner.getByRole('heading',{name:'Elektronik Harp ortak görev',exact:true}).count(),5);
+  console.log('PASS team-wide task assignment creates one independent task per active Electronic Warfare member');
   await nav(mentor,'members');assert.equal(await mentor.getByText('bob@example.com',{exact:true}).count(),0);
   await nav(mentor,'tasks');await mentor.locator('[data-action=task-new]').click();
   await mentor.locator('[name=title]').fill('İlk ölçüm çıktısı');
@@ -146,7 +153,7 @@ try {
   console.log('PASS finance income, expense, exact balance, reload, void audit and export');
   await nav(owner,'settings');const downloadPromise=owner.waitForEvent('download');await owner.locator('[data-action=backup]').click();
   const download=await downloadPromise;const backup=JSON.parse(await readFile(await download.path(),'utf8'));
-  assert.equal(backup.app,'ARVUS-CLOUD');assert.equal(backup.data.Tasks.length,1);assert.equal(Object.values(backup.data.comments).flat().length,1);assert.equal(backup.data.Loans.length,1);
+  assert.equal(backup.app,'ARVUS-CLOUD');assert.equal(backup.data.Tasks.length,6);assert.equal(Object.values(backup.data.comments).flat().length,1);assert.equal(backup.data.Loans.length,1);
   assert.equal(backup.data.Finance.length,3);
   await owner.locator('#applications-file').setInputFiles({name:'applications.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({app:'ARVUS-APPLICATIONS',version:1,source:'arvus-basvuru',applications:[{fullName:'İçe Aktarılan Üye',email:'imported@example.com',category:'ai'}]}))});
   await save(owner);await nav(owner,'members');const imported=owner.locator('tr').filter({hasText:'imported@example.com'});await imported.waitFor();assert.match(await imported.innerText(),/Erişim kapalı/);
